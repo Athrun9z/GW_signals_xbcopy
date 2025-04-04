@@ -13,6 +13,7 @@ import torch
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from torch import nn
+from torch.nn import functional as F
 
 ##############################################################################################################
 # 这部分代码主要是定义数据生成器
@@ -78,6 +79,94 @@ class DatasetGenerator(Dataset):
 # 在模型定义中，我们定义了一个卷积神经网络，包含了多个卷积层、激活函数、批量归一化层和最大池化层。
 # 最后，我们添加了一个Flatten层和两个全连接层。
 
+# class MyNet(nn.Module):
+#     def __init__(self):
+#         # 初始化函数，设置网络的各种参数
+#         super(MyNet, self).__init__()
+
+#         Nfilters = [8, 16, 16, 32, 64, 64, 128, 128]
+#         filter_size = [(1, 32)] + [(1, 16)] * 3 + [(1, 8)] * 2 + [(1, 4)] * 2
+#         filter_stride = [(1, 1)] * 8
+#         dilation = [(1, 1)] * 8
+#         pooling = [1, 0, 0, 0, 1, 0, 0, 1]
+#         pool_size = [[1, 8]] + [(1, 1)] * 3 + [[1, 6]] + [(1, 1)] * 2 + [[1, 4]]
+#         pool_stride = [[1, 8]] + [(1, 1)] * 3 + [[1, 6]] + [(1, 1)] * 2 + [[1, 4]]
+
+#         self.layers = nn.ModuleList()
+
+#         for i in range(8):
+#             # 添加卷积层
+#             self.layers.append(nn.Conv2d(
+#                 in_channels=1 if i == 0 else Nfilters[i-1],  # Number of channels in the input image
+#                 out_channels=Nfilters[i],  # Number of channels produced by the convolution
+#                 kernel_size=filter_size[i],  # Size of the convolving kernel
+#                 stride=filter_stride[i],  # Stride of the convolution
+#                 padding=0,  # Zero-padding added to both sides of the input
+#                 dilation=dilation[i],  # Spacing between kernel elements
+#                 groups=1,  # Number of blocked connections from input channels to output channels
+#                 bias=True,  # If True, adds a learnable bias to the output
+#                 padding_mode='zeros',  # Specifies the type of padding, 'zeros' pads with zero
+#             ))
+#             # 添加ELU激活函数，alpha参数为0.01
+#             self.layers.append(nn.ELU(0.01))
+#             # 添加批量归一化层，特征数量为Nfilters[i]
+#             self.layers.append(nn.BatchNorm2d(num_features=Nfilters[i]))
+#             # 如果pooling[i]为真，添加最大池化层
+#             if pooling[i]:
+#                 # 最大池化层的参数：核大小为pool_size[i]，步长为pool_stride[i]，填充为0
+#                 self.layers.append(nn.MaxPool2d(
+#                     kernel_size=pool_size[i],
+#                     stride=pool_stride[i],
+#                     padding=0,
+#                 ))
+
+#         # 添加Flatten层，将输入展平
+#         self.layers.append(nn.Flatten())
+#         # 添加全连接层，输入维度为20224，输出维度为64
+#         self.layers.append(nn.Linear(20224, 64))
+#         # 添加ELU激活函数，alpha参数为0.01
+#         self.layers.append(nn.ELU(0.01))
+#         # 添加Dropout层，丢弃率为0.5
+#         self.layers.append(nn.Dropout(0.5))
+#         # 添加全连接层，输入维度为64，输出维度为2
+#         self.layers.append(nn.Linear(64, 2))
+
+#     def forward(self, x):
+#         # 前向传播函数
+#         for layer in self.layers:
+#             x = layer(x)
+#         return x
+
+
+class ResidualBlock(nn.Module):
+    def __init__(self, in_channels, channels, kernel_size=1, stride=1, padding=0):
+        super(ResidualBlock, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels, channels, kernel_size, stride=stride, padding=padding, bias=False)
+        self.bn1 = nn.BatchNorm2d(channels)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(channels, channels, kernel_size, stride=1, padding=padding, bias=False)
+        self.bn2 = nn.BatchNorm2d(channels)
+
+        self.downsample = None
+        if stride != 1 or in_channels != channels:
+            self.downsample = nn.Sequential(
+                nn.Conv2d(in_channels, channels, kernel_size, stride=stride, bias=False),
+                nn.BatchNorm2d(channels)
+            )
+
+    def forward(self, x):
+        identity = x
+        out = self.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        if self.downsample:
+            identity = self.downsample(x)
+
+        identity = F.interpolate(identity, size=out.shape[-2:], mode="bilinear", align_corners=False)
+        out += identity
+
+        return self.relu(out)
+
+
 class MyNet(nn.Module):
     def __init__(self):
         # 初始化函数，设置网络的各种参数
@@ -95,21 +184,21 @@ class MyNet(nn.Module):
 
         for i in range(8):
             # 添加卷积层
-            self.layers.append(nn.Conv2d(
+            self.layers.append(ResidualBlock(
                 in_channels=1 if i == 0 else Nfilters[i-1],  # Number of channels in the input image
-                out_channels=Nfilters[i],  # Number of channels produced by the convolution
+                channels=Nfilters[i],  # Number of channels produced by the convolution
                 kernel_size=filter_size[i],  # Size of the convolving kernel
                 stride=filter_stride[i],  # Stride of the convolution
-                padding=0,  # Zero-padding added to both sides of the input
-                dilation=dilation[i],  # Spacing between kernel elements
-                groups=1,  # Number of blocked connections from input channels to output channels
-                bias=True,  # If True, adds a learnable bias to the output
-                padding_mode='zeros',  # Specifies the type of padding, 'zeros' pads with zero
+                # padding=0,  # Zero-padding added to both sides of the input
+                # dilation=dilation[i],  # Spacing between kernel elements
+                # groups=1,  # Number of blocked connections from input channels to output channels
+                # bias=True,  # If True, adds a learnable bias to the output
+                # padding_mode='zeros',  # Specifies the type of padding, 'zeros' pads with zero
             ))
             # 添加ELU激活函数，alpha参数为0.01
-            self.layers.append(nn.ELU(0.01))
+            # self.layers.append(nn.ELU(0.01))
             # 添加批量归一化层，特征数量为Nfilters[i]
-            self.layers.append(nn.BatchNorm2d(num_features=Nfilters[i]))
+            # self.layers.append(nn.BatchNorm2d(num_features=Nfilters[i]))
             # 如果pooling[i]为真，添加最大池化层
             if pooling[i]:
                 # 最大池化层的参数：核大小为pool_size[i]，步长为pool_stride[i]，填充为0
@@ -118,17 +207,18 @@ class MyNet(nn.Module):
                     stride=pool_stride[i],
                     padding=0,
                 ))
-
+    
         # 添加Flatten层，将输入展平
         self.layers.append(nn.Flatten())
         # 添加全连接层，输入维度为20224，输出维度为64
-        self.layers.append(nn.Linear(20224, 64))
+        self.layers.append(nn.Linear(18944, 64))
         # 添加ELU激活函数，alpha参数为0.01
         self.layers.append(nn.ELU(0.01))
         # 添加Dropout层，丢弃率为0.5
         self.layers.append(nn.Dropout(0.5))
         # 添加全连接层，输入维度为64，输出维度为2
         self.layers.append(nn.Linear(64, 2))
+
 
     def forward(self, x):
         # 前向传播函数
