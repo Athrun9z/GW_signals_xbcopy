@@ -26,6 +26,7 @@ class DatasetGenerator(Dataset):
                  detectors=['H1', 'L1'],
                  nsample_perepoch=100,
                  Nnoise=25, mdist='metric',beta=[0.75,0.95],
+                 signal='BBH',
                  verbose=True):
         # 初始化函数，设置各种参数
         if verbose:
@@ -38,6 +39,13 @@ class DatasetGenerator(Dataset):
 
         self.detectors = detectors
         self.snr = snr
+
+        self.m_min = 5.0
+        self.M_max = 100.0
+
+        if signal == 'BNS':
+            self.m_min = 1.0
+            self.M_max = 5.0
         
         self.generate(nsample_perepoch, Nnoise, mdist, beta)  # pre-generate sampels
 
@@ -48,7 +56,7 @@ class DatasetGenerator(Dataset):
         # mdist:  # mass distribution (astro,gh,metric)
 
         ts, par = sim_data(self.fs, self.T, self.snr, self.detectors, Nnoise, size=Nblock, mdist=mdist,
-                           beta=beta, verbose=False)
+                           beta=beta, verbose=False, m_min=self.m_min, M_max=self.M_max)
         self.strains = np.expand_dims(ts[0], 1)   # (nsample, 1, len(det), fs*T)
         self.labels = ts[1]
 

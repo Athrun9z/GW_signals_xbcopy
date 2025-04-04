@@ -263,13 +263,13 @@ def get_fmin(M,eta,dt,verbose):
 
     return fmin
 
-def gen_par(fs,T_obs,mdist='astro',beta=[0.75,0.95],verbose=True):
+def gen_par(fs,T_obs,mdist='astro',beta=[0.75,0.95],verbose=True, m_min=5.0, M_max=100.0):
     """
     Generates a random set of parameters
     """
     # define distribution params
-    m_min = 5.0         # rest frame component masses
-    M_max = 100.0       # rest frame total mass
+    # m_min = 5.0         # rest frame component masses
+    # M_max = 100.0       # rest frame total mass
     log_m_max = np.log(M_max - m_min)
 
     m12, mc, eta = gen_masses(m_min,M_max,mdist=mdist,verbose=verbose)
@@ -445,7 +445,7 @@ def make_bbh(hp,hc,fs,ra,dec,psi,det,verbose):
 
     return new_ht, new_hp, new_hc
 
-def sim_data(fs,T_obs,snr=1.0,dets=['H1'],Nnoise=25,size=1000,mdist='astro',beta=[0.75,0.95], verbose=True):
+def sim_data(fs,T_obs,snr=1.0,dets=['H1'],Nnoise=25,size=1000,mdist='astro',beta=[0.75,0.95], verbose=True, m_min=5.0, M_max=10.0):
     """
     Simulates all of the test, validation and training data timeseries
     """
@@ -474,7 +474,7 @@ def sim_data(fs,T_obs,snr=1.0,dets=['H1'],Nnoise=25,size=1000,mdist='astro',beta
     while cnt < size:
 
         # generate a single new timeseries and chirpmass
-        par_new = gen_par(fs,T_obs,mdist=mdist,beta=beta,verbose=verbose)
+        par_new = gen_par(fs,T_obs,mdist=mdist,beta=beta,verbose=verbose, m_min=m_min, M_max=M_max)
         ts_new,_,_ = gen_bbh(fs,T_obs,psds,snr=snr,dets=dets,beta=beta,par=par_new,verbose=verbose)
 
         # loop over noise realisations
